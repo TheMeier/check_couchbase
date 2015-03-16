@@ -5,17 +5,19 @@
 import nagiosplugin
 import requests
 import argparse
+from nagiosplugin.performance import Performance
 
 class CBBucketGet(nagiosplugin.Context):
+    def performance(self, metric, resource):
+        return Performance('hitratio', metric.value['hit_ratio'].pop()) 
+
     def evaluate(self, metric, resource):
         cmd_get = metric.value['cmd_get'].pop()
         hit_ratio = metric.value['hit_ratio'].pop()
-        if cmd_get < 30:
+        if cmd_get > 30:
             if hit_ratio < 0.7:
                 return self.result_cls(nagiosplugin.state.Warn, "hit ratio low")
         return self.result_cls(nagiosplugin.state.Ok, "hit ratio ok or not enough request to measure")
-    def performance(self, metric, resource):
-        return self.result_cls(nagiosplugin.Performance('hit_ratio', metric.value['hit_ratio'].pop()))
 
 class CBNodeStatus(nagiosplugin.Context):
     def evaluate(self, metric, resource):
@@ -72,13 +74,11 @@ class Bucket(nagiosplugin.Resource):
 
 def main():
     argp = argparse.ArgumentParser()
-    argp.add_argument('-H', '--host', help="host to connect to", default='couchbase-qs-1.mm.br.de')
+    argp.add_argument('-H', '--host', help="host to connect to")
     argp.add_argument('-p', '--port', help="port to connect to", default='8091')
-    argp.add_argument("-U", "--user", help="username for authentication", default='nagios')
-    argp.add_argument("-P", "--password", dest="password", 
-                      help="password for authentication", default='nagios')
-    argp.add_argument("-b", "--bucket", dest="bucket", 
-                      help="couchbase bucket name")
+    argp.add_argument("-U", "--user", help="username for authentication")
+    argp.add_argument("-P", "--password", help="password for authentication")
+    argp.add_argument("-b", "--bucket",  help="couchbase bucket name")
     argp.add_argument("--ramratio_w", help="ram ratio warning", default='60')
     argp.add_argument("--ramratio_c", help="ram ratio critical", default='80')
     argp.add_argument("--quotaratio_w", help="quota ratio warning", default='60')
@@ -92,6 +92,7 @@ def main():
         r = requests.get("http://%s:%s/pools/default" % (args.host, args.port),
                          auth=(args.user, args.password))
         if r.status_code != 200:
+            print "####  HTTP Status %s ####" % (r.status_code   )
             raise RuntimeError
         data = r.json()
         print data['alerts']
@@ -114,16 +115,7 @@ def main():
         check.add(CBBucketGet('get'))
         check.main()
         
-        #print data['op']['samples']['mem_used'].pop()
-        #print data['op']['samples']['ep_mem_low_wat'].pop()
-        #print data['op']['samples']['ep_mem_high_wat'].pop()
-        #print data['op']['samples']['ep_flusher_todo'].pop()
-        #print data['op']['samples']['get_misses'].pop()
-        #print data['op']['samples']['hit_ratio'].pop()
-        #print data['op']['samples']['evictions'].pop()
-        
-        
-        
+    
 
 if __name__ == '__main__':
     main()
