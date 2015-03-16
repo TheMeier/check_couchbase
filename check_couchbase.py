@@ -62,8 +62,6 @@ class Bucket(nagiosplugin.Resource):
         self.data = data
 
     def probe(self):
-#print data['op']['samples']['mem_used'].pop()
-#print data['op']['samples']['ep_mem_low_wat'].pop()
         samples = self.data['op']['samples']
         low_wat = ( samples['mem_used'].pop() ) * 1.00 / samples['ep_mem_low_wat'].pop()  * 100
         high_wat = ( samples['mem_used'].pop() ) * 1.00 / samples['ep_mem_high_wat'].pop()  * 100
@@ -95,11 +93,10 @@ def main():
             print "####  HTTP Status %s ####" % (r.status_code   )
             raise RuntimeError
         data = r.json()
-        print data['alerts']
         check = nagiosplugin.Check( Cluster(data) )
-        check.add(nagiosplugin.ScalarContext("ramratio", args.ramratio_w, args.ramratio_c, fmt_metric='{value}% total memory usage '))
-        check.add(nagiosplugin.ScalarContext("quotaratio", args.quotaratio_w, args.quotaratio_c, fmt_metric='{value}% quota memory usage '))
-        check.add(nagiosplugin.ScalarContext("diskratio", args.diskratio_w, args.diskratio_c, fmt_metric='{value}% quota memory usage '))       
+        check.add(nagiosplugin.ScalarContext("ramratio", args.ramratio_w, args.ramratio_c, fmt_metric='{value}% total memory usage'))
+        check.add(nagiosplugin.ScalarContext("quotaratio", args.quotaratio_w, args.quotaratio_c, fmt_metric='{value}% quota memory usage'))
+        check.add(nagiosplugin.ScalarContext("diskratio", args.diskratio_w, args.diskratio_c, fmt_metric='{value}% quota disk usage'))       
         check.add(CouchBaseAlerts('alerts'))
         check.add(CBNodeStatus('nodes'))
         check.main()
@@ -107,6 +104,7 @@ def main():
         r = requests.get("http://%s:%s/pools/default/buckets/%s/stats" % (args.host, args.port, args.bucket),
                          auth=(args.user, args.password))
         if r.status_code != 200:
+            print "####  HTTP Status %s ####" % (r.status_code   )
             raise RuntimeError
         data = r.json()
         check = nagiosplugin.Check( Bucket(data) )
