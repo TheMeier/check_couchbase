@@ -40,21 +40,44 @@ class CouchBaseAlerts(nagiosplugin.Context):
         else:    
             return self.result_cls(nagiosplugin.state.Warn, "Active alerts: %s" % (";".join(alerts)))
 
+class CBTaskErrors(nagiosplugin.Context):
+    def evaluate(self, metric, resource):
+        for element in metric.value:
+            if element.has_key('errors'):
+                if len(element['errors']) == 0:
+                    return self.result_cls(nagiosplugin.state.Ok, "No alerts")
+                else:    
+                    return self.result_cls(nagiosplugin.state.Warn, "Active task errors: %s" % (";".join(element['errors'])))
+
 
 class Cluster(nagiosplugin.Resource):
-    def __init__(self, data):
+    def __init__(self, data, tasks):
  
         self.data = data
+        self.tasks = tasks
 
     def probe(self):
         ramratio = ( self.data['storageTotals']['ram']['used'] ) * 1.00 / self.data['storageTotals']['ram']['total']  * 100.00
         quotaratio = ( self.data['storageTotals']['ram']['quotaUsed'] ) * 1.00 / self.data['storageTotals']['ram']['quotaTotal']  * 100.00
         diskratio = ( self.data['storageTotals']['hdd']['used'] ) * 1.00 / self.data['storageTotals']['ram']['total']  * 100.00
         yield nagiosplugin.Metric('alerts', self.data['alerts'])
+        yield nagiosplugin.Metric('taskerrors', self.tasks)
         yield nagiosplugin.Metric('nodes', self.data['nodes'])
         yield nagiosplugin.Metric('ramratio', ramratio)       
         yield nagiosplugin.Metric('quotaratio', quotaratio)
         yield nagiosplugin.Metric('diskratio', diskratio)         
+
+class Status(nagiosplugin.Resource):
+    def __init__(self, data):
+ 
+        self.data = data
+
+    def probe(self):
+        for element in self.data:
+            print element['type']
+            if element.has_key('errors'):
+                yield nagiosplugin.Metric('alerts', self.data['errors'])
+                 
 
 class Bucket(nagiosplugin.Resource):
     def __init__(self, data):
@@ -93,12 +116,25 @@ def main():
             print "####  HTTP Status %s ####" % (r.status_code   )
             raise RuntimeError
         data = r.json()
-        check = nagiosplugin.Check( Cluster(data) )
+        r = requests.get("http://%s:%s/pools/default/tasks" % (args.host, args.port),
+                          auth=(args.user, args.password))
+        if r.status_code != 200:
+            print "####  HTTP Status %s ####" % (r.status_code   )
+            raise RuntimeError
+        tasks = r.json()
+        check = nagiosplugin.Check( Cluster(data, tasks) )
         check.add(nagiosplugin.ScalarContext("ramratio", args.ramratio_w, args.ramratio_c, fmt_metric='{value}% total memory usage'))
         check.add(nagiosplugin.ScalarContext("quotaratio", args.quotaratio_w, args.quotaratio_c, fmt_metric='{value}% quota memory usage'))
         check.add(nagiosplugin.ScalarContext("diskratio", args.diskratio_w, args.diskratio_c, fmt_metric='{value}% quota disk usage'))       
         check.add(CouchBaseAlerts('alerts'))
+        check.add(CBTaskErrors('taskerrors'))
         check.add(CBNodeStatus('nodes'))
+        check.main()       
+        r = requests.get("http://%s:%s/pools/default/tasks" % (args.host, args.port),
+                          auth=(args.user, args.password))
+        data = r.json()
+        check = nagiosplugin.Check( Status(data) )
+        check.add(CouchBaseAlerts('alerts'))
         check.main()
     else:
         r = requests.get("http://%s:%s/pools/default/buckets/%s/stats" % (args.host, args.port, args.bucket),
