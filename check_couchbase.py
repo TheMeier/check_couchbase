@@ -42,12 +42,15 @@ class CouchBaseAlerts(nagiosplugin.Context):
 
 class CBTaskErrors(nagiosplugin.Context):
     def evaluate(self, metric, resource):
+        errors = 0
         for element in metric.value:
             if element.has_key('errors'):
-                if len(element['errors']) == 0:
-                    return self.result_cls(nagiosplugin.state.Ok, "No alerts")
-                else:    
-                    return self.result_cls(nagiosplugin.state.Warn, "Active task errors: %s" % (";".join(element['errors'])))
+                if len(element['errors']) > 0:
+                    errors = errors + len(element['errors'])
+        if errors == 0:
+            return self.result_cls(nagiosplugin.state.Ok, "No alerts")
+        else:
+            return self.result_cls(nagiosplugin.state.Warn, "Found %s task errors" % (errors))
 
 
 class Cluster(nagiosplugin.Resource):
@@ -109,14 +112,15 @@ def main():
 
     
     args = argp.parse_args()
-    if args.bucket == None: 
+    if args.bucket == None:
+        taskurl = "http://%s:%s/pools/default/tasks" % (args.host, args.port)
         r = requests.get("http://%s:%s/pools/default" % (args.host, args.port),
                          auth=(args.user, args.password))
         if r.status_code != 200:
             print "####  HTTP Status %s ####" % (r.status_code   )
             raise RuntimeError
         data = r.json()
-        r = requests.get("http://%s:%s/pools/default/tasks" % (args.host, args.port),
+        r = requests.get(taskurl,
                           auth=(args.user, args.password))
         if r.status_code != 200:
             print "####  HTTP Status %s ####" % (r.status_code   )
