@@ -7,6 +7,7 @@ import requests
 import argparse
 from nagiosplugin.performance import Performance
 
+
 class CBBucketGet(nagiosplugin.Context):
     def performance(self, metric, resource):
         return Performance('hitratio', metric.value['hit_ratio'].pop()) 
@@ -40,7 +41,7 @@ class CouchBaseAlerts(nagiosplugin.Context):
         else:    
             return self.result_cls(nagiosplugin.state.Warn, "Active alerts: %s" % (";".join(alerts)))
 
-class CBTaskErrors(nagiosplugin.Context):
+class CXdcrErrors(nagiosplugin.Context):
     def evaluate(self, metric, resource):
         errors = 0
         for element in metric.value:
@@ -50,7 +51,19 @@ class CBTaskErrors(nagiosplugin.Context):
         if errors == 0:
             return self.result_cls(nagiosplugin.state.Ok, "No alerts")
         else:
-            return self.result_cls(nagiosplugin.state.Warn, "Found %s task errors" % (errors))
+            return self.result_cls(nagiosplugin.state.Warn, "Found %s XDCR errors" % (errors))
+
+class CBXdcrPaused(nagiosplugin.Context):
+    def evaluate(self, metric, resource):
+        paused = []
+        for element in metric.value:
+            if element.has_key('status'):
+                if element['status'] == 'paused':
+                    paused.append(element['target'])
+        if len(paused) == 0:
+            return self.result_cls(nagiosplugin.state.Ok, "No alerts")
+        else:
+            return self.result_cls(nagiosplugin.state.Warn, "Replications paused for targets: %s" % (";".join(paused)))
 
 
 class Cluster(nagiosplugin.Resource):
@@ -65,6 +78,7 @@ class Cluster(nagiosplugin.Resource):
         diskratio = ( self.data['storageTotals']['hdd']['used'] ) * 1.00 / self.data['storageTotals']['ram']['total']  * 100.00
         yield nagiosplugin.Metric('alerts', self.data['alerts'])
         yield nagiosplugin.Metric('taskerrors', self.tasks)
+        yield nagiosplugin.Metric('xdcrpaused', self.tasks)
         yield nagiosplugin.Metric('nodes', self.data['nodes'])
         yield nagiosplugin.Metric('ramratio', ramratio)       
         yield nagiosplugin.Metric('quotaratio', quotaratio)
@@ -131,7 +145,8 @@ def main():
         check.add(nagiosplugin.ScalarContext("quotaratio", args.quotaratio_w, args.quotaratio_c, fmt_metric='{value}% quota memory usage'))
         check.add(nagiosplugin.ScalarContext("diskratio", args.diskratio_w, args.diskratio_c, fmt_metric='{value}% quota disk usage'))       
         check.add(CouchBaseAlerts('alerts'))
-        check.add(CBTaskErrors('taskerrors'))
+        check.add(CXdcrErrors('taskerrors'))
+        check.add(CBXdcrPaused('xdcrpaused'))
         check.add(CBNodeStatus('nodes'))
         check.main()       
         r = requests.get("http://%s:%s/pools/default/tasks" % (args.host, args.port),
