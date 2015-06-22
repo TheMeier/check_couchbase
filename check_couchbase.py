@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
-"""Hello world Nagios check."""
-
+import pprint
 import nagiosplugin
 import requests
 import argparse
 from nagiosplugin.performance import Performance
+
+pp = pprint.PrettyPrinter(indent=4)
 
 
 class CBBucketGet(nagiosplugin.Context):
@@ -98,7 +99,6 @@ class Status(nagiosplugin.Resource):
 
 class Bucket(nagiosplugin.Resource):
     def __init__(self, data):
- 
         self.data = data
 
     def probe(self):
@@ -106,8 +106,20 @@ class Bucket(nagiosplugin.Resource):
         low_wat = ( samples['mem_used'].pop() ) * 1.00 / samples['ep_mem_low_wat'].pop()  * 100
         high_wat = ( samples['mem_used'].pop() ) * 1.00 / samples['ep_mem_high_wat'].pop()  * 100
         yield nagiosplugin.Metric('low_wat', low_wat)       
-        yield nagiosplugin.Metric('low_wat', high_wat)
+        yield nagiosplugin.Metric('high_wat', high_wat)
         yield nagiosplugin.Metric('get', samples)
+
+class Memcached(nagiosplugin.Resource):
+    def __init__(self, data):
+        self.data = data
+
+    def probe(self):
+        samples = self.data['op']['samples']
+        if samples['hit_ratio'].pop() == 0:
+          hitrate = 100
+        else:
+          hitrate = samples['hit_ratio'].pop()
+        yield nagiosplugin.Metric('hitrate', hitrate)
 
 
 def main():
@@ -117,6 +129,7 @@ def main():
     argp.add_argument("-U", "--user", help="username for authentication")
     argp.add_argument("-P", "--password", help="password for authentication")
     argp.add_argument("-b", "--bucket",  help="couchbase bucket name")
+    argp.add_argument("-m", "--memcached",  help="bucket type memcached", action='store_true')
     argp.add_argument("--ramratio_w", help="ram ratio warning", default='60')
     argp.add_argument("--ramratio_c", help="ram ratio critical", default='80')
     argp.add_argument("--quotaratio_w", help="quota ratio warning", default='60')
@@ -154,6 +167,16 @@ def main():
         data = r.json()
         check = nagiosplugin.Check( Status(data) )
         check.add(CouchBaseAlerts('alerts'))
+        check.main()
+    elif args.bucket != None and args.memcached:
+        r = requests.get("http://%s:%s/pools/default/buckets/%s/stats" % (args.host, args.port, args.bucket),
+                         auth=(args.user, args.password))
+        if r.status_code != 200:
+            print "####  HTTP Status %s ####" % (r.status_code   )
+            raise RuntimeError
+        data = r.json()
+        check = nagiosplugin.Check( Memcached(data) )
+        check.add(nagiosplugin.ScalarContext("hitrate", '80:', '90:', fmt_metric='{value}% hitrate'))
         check.main()
     else:
         r = requests.get("http://%s:%s/pools/default/buckets/%s/stats" % (args.host, args.port, args.bucket),
