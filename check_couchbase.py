@@ -115,10 +115,7 @@ class Memcached(nagiosplugin.Resource):
 
     def probe(self):
         samples = self.data['op']['samples']
-        if samples['hit_ratio'].pop() == 0:
-          hitrate = 100
-        else:
-          hitrate = samples['hit_ratio'].pop()
+        hitrate = samples['hit_ratio'].pop()
         yield nagiosplugin.Metric('hitrate', hitrate)
 
 
@@ -176,7 +173,7 @@ def main():
             raise RuntimeError
         data = r.json()
         check = nagiosplugin.Check( Memcached(data) )
-        check.add(nagiosplugin.ScalarContext("hitrate", '80:', '90:', fmt_metric='{value}% hitrate'))
+        check.add(nagiosplugin.ScalarContext("hitrate", '@1:90', '@1:80', fmt_metric='{value}% hitrate'))
         check.main()
     else:
         r = requests.get("http://%s:%s/pools/default/buckets/%s/stats" % (args.host, args.port, args.bucket),
