@@ -129,8 +129,8 @@ def main():
     argp.add_argument("-m", "--memcached",  help="bucket type memcached", action='store_true')
     argp.add_argument("--ramratio_w", help="ram ratio warning", default='60')
     argp.add_argument("--ramratio_c", help="ram ratio critical", default='80')
-    argp.add_argument("--quotaratio_w", help="quota ratio warning", default='60')
-    argp.add_argument("--quotaratio_c", help="quota ratio critical", default='80')
+    argp.add_argument("--quotaratio_w", help="quota ratio warning", default='90')
+    argp.add_argument("--quotaratio_c", help="quota ratio critical", default='95')
     argp.add_argument("--diskratio_w", help="disk ratio warning", default='60')
     argp.add_argument("--diskratio_c",  help="d ratio critical", default='80')
 
